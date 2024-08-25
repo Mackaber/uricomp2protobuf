@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>URI to Protobuf Decoder and Redirector</title>
+  <script src="https://cdn.jsdelivr.net/npm/protobufjs@6.11.2/dist/protobuf.min.js"></script>
+</head>
+<body>
+  <script type="module">
+    // Define the Protobuf schema for AppData
+    const root = protobuf.Root.fromJSON({
+      nested: {
+        FileContent: {
+          oneofs: {
+            content: { oneof: ["data", "text"] }
+          },
+          fields: {
+            data: { type: "bytes", id: 1 },
+            text: { type: "string", id: 2 }
+          }
+        },
+        File: {
+          fields: {
+            files: {
+              keyType: "string",
+              type: "FileContent",
+              id: 1
+            }
+          }
+        },
+        AppData: {
+          fields: {
+            entrypoint: { type: "string", id: 1 },
+            requirements: { rule: "repeated", type: "string", id: 2 },
+            files: { type: "File", id: 3 }
+          }
+        }
+      }
+    });
+
+    const AppData = root.lookupType("AppData");
+
+    // Buffer conversion functions
+    function u8aToBase64(buf) {
+      let str = "";
+      const nChunks = Math.ceil(buf.length / 2 ** 16);
+      for (let i = 0; i < nChunks; ++i) {
+        const offset = 2 ** 16 * i;
+        const chunk = buf.slice(offset, offset + 2 ** 16);
+        str += String.fromCharCode.apply(null, chunk);
+      }
+      return window.btoa(str);
+    }
+
+    function base64ToU8A(base64) {
+      const s = window.atob(base64);
+      const len = s.length;
+      const buf = new Uint8Array(len);
+      for (let i = 0; i < len; i++) {
+        buf[i] = s.charCodeAt(i);
+      }
+      return buf;
+    }
+
+    // Conversion between base64 and base64url
+    function b64ToB64url(base64) {
+      return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, ",");
+    }
+
+    function b64urlToB64(hashSafe) {
+      return hashSafe.replace(/-/g, "+").replace(/_/g, "/").replace(/,/g, "=");
+    }
+
+    function encodeAppData(appData) {
+      // Verify the payload if needed
+      const errMsg = AppData.verify(appData);
+      if (errMsg) throw Error(errMsg);
+
+      // Encode a message to an Uint8Array (buffer)
+      const message = AppData.create(appData);
+      const buffer = AppData.encode(message).finish();
+      const base64 = u8aToBase64(buffer);
+      return b64ToB64url(base64);
+    }
+
+    function decodeAppData(base64url) {
+      const base64 = b64urlToB64(base64url);
+      const buffer = base64ToU8A(base64);
+      const message = AppData.decode(buffer);
+      return AppData.toObject(message, {
+        longs: String,
+        enums: String,
+        bytes: String
+      });
+    }
+
+    // Main logic to handle URL hash
+    const hash = decodeURIComponent(window.location.hash.substring(1));
+
+    if (hash) {
+      try {
+        // Parse the JSON string directly to an object
+        const parsedData = JSON.parse(hash);
+
+        // Assume the structure is like this:
+        // { "streamlit_app.py": { type: "CODE", contents: "<code contents>" } }
+        const filename = Object.keys(parsedData)[0];
+        const fileData = parsedData[filename];
+        const fileContents = fileData.contents;
+
+        // Create the AppData object
+        const appData = {
+          entrypoint: filename,
+          requirements: [],
+          files: {
+            files: {
+              [filename]: {
+                content: {
+                  $case: "data",
+                  data: new TextEncoder().encode(fileContents)
+                }
+              }
+            }
+          }
+        };
+
+        // Encode the protobuf data to base64url format
+        const encodedHash = encodeAppData(appData);
+
+        // Log the new encoded hash to the console for debugging
+        console.log(`Encoded hash: ${encodedHash}`);
+
+        // Redirect to the new URL with the re-encoded hash
+        // const newUrl = `https://share.stlite.net/#${encodedHash}`;
+        // window.location.replace(newUrl);
+      } catch (error) {
+        console.error("Failed to decode or encode the data:", error);
+      }
+    } else {
+      console.warn("No data provided in the URL hash.");
+    }
+  </script>
+</body>
+</html>
