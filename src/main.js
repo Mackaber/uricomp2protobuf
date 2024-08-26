@@ -2,37 +2,41 @@
 
 import { decodeURIComponentToFileStructure } from "./decode.js";
 import { transformToAppData } from "./appData.js";
-import { encodeAppData, base64Encode } from "./encode.js";
+import { compressAppData, decompressAppData } from "./compress.js";
 
 document.addEventListener("DOMContentLoaded", () => {
-  const pythonScript = `
+
+  const appData = {
+    entrypoint: "streamlit_app.py",
+    files: {
+      "streamlit_app.py": {
+        content: {
+          $case: "text",
+          text: `
 import streamlit as st
 
-st.title("Thing!")
-  `;
-
-  const encodedUriComponent = encodeURIComponent(
-    JSON.stringify({
-      "streamlit_app.py": {
-        type: "CODE",
-        contents: pythonScript,
+st.write("Your mon!!!")`,
+        },
       },
-    })
+    },
+    requirements: [],
+  };
+
+  deco
+
+  console.log("AppData before compression:", appData); // Log AppData before encoding
+
+  // Compress the AppData to a base64url string
+  const base64urlString = compressAppData(appData);
+  console.log("Base64 URL String:", base64urlString);
+
+  // Decompress the base64url string back to AppData
+  const decodedAppData = decompressAppData(base64urlString);
+  console.log("Decoded AppData:", decodedAppData);
+
+  // Check if text content is properly restored
+  console.log(
+    "Decoded text content:",
+    decodedAppData.files["streamlit_app.py"].content.text
   );
-
-  console.log("Encoded URI Component:", encodedUriComponent);
-
-  const fileStructure = decodeURIComponentToFileStructure(encodedUriComponent);
-  console.log("File Structure:", fileStructure);
-
-  const appData = transformToAppData(fileStructure);
-  console.log("AppData:", appData);
-
-  // Encode the AppData to Protobuf
-  const encodedProtobuf = encodeAppData(appData);
-  console.log("Encoded Protobuf:", encodedProtobuf);
-
-  // Convert the Uint8Array to a base64 string for easier handling
-  const base64Protobuf = base64Encode(encodedProtobuf);
-  console.log("Base64 Encoded Protobuf:", base64Protobuf);
 });
